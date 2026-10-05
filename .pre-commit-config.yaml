@@ -1,0 +1,26 @@
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.4.10
+    hooks:
+      - id: ruff
+        args: [--fix]
+        files: ^(sdk|server|examples)/
+      - id: ruff-format
+        files: ^(sdk|server|examples)/
+
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.10.0
+    hooks:
+      - id: mypy
+        files: ^(sdk|server)/
+        additional_dependencies:
+          - pydantic>=2.7
+          - fastapi>=0.111
+          - httpx>=0.27
+
+  - repo: https://github.com/pre-commit/mirrors-prettier
+    rev: v3.3.2
+    hooks:
+      - id: prettier
+        files: ^dashboard/
+        types_or: [ts, tsx, json, css, markdown]
