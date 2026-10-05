@@ -7,26 +7,33 @@
 
 AgentLens is a self-hosted dashboard that turns chaotic agent runs into structured, inspectable traces — with a built-in rubric eval harness powered by Claude-as-judge. Framework-agnostic, local-first, no cloud required.
 
-> **M1 shipped.** The repo scaffold, tooling configuration, and stub packages are in place. Feature implementation begins in M2.
+> **M2 shipped.** The trace schema and Python SDK are complete and tested. The FastAPI collector and dashboard land in M3–M4.
 
 ---
 
-## What ships in M1
+## What works now
 
+### M1 — Scaffold
 - Monorepo layout: `sdk/`, `server/`, `dashboard/`, `examples/`, `rubrics/`, `docs/`
 - Python toolchain: root `pyproject.toml` with ruff (lint + format) and mypy; per-package `pyproject.toml` under `sdk/` and `server/`
 - Node toolchain: `dashboard/package.json` with ESLint, Prettier, Tailwind CSS, Vite, and TypeScript
 - Pre-commit config (`.pre-commit-config.yaml`) wiring ruff and ESLint hooks
 - `Makefile` with `install`, `lint`, `format`, and `test` targets (all functional); `dev` and `demo` stubbed for later milestones
-- Stub Python packages: `agentlens` (SDK, empty) and `agentlens_server` (FastAPI app with a `/health` endpoint), each with placeholder test suites
 - `docker-compose.yml` and `server/Dockerfile` skeleton
 - MIT license, `.gitignore` covering Python and Node artifacts
+
+### M2 — Trace schema + Python SDK
+- **Pydantic v2 trace models** — `Run`, `Span`, `SpanKind` (`llm`, `tool`, `agent`, `memory`, `retry`), `RunStatus`, and `TraceEvent`; all serialisable to JSON
+- **`TraceClient`** — module-level `configure()` sets the collector endpoint; `_emit` swallows transport errors via `warnings.warn` so instrumentation never crashes user code
+- **`@traced` decorator** — works on sync and async functions; opens a root span, propagates `run_id` / `span_id` via `contextvars`, and records duration + exceptions
+- **`span()` / `async_span()` context managers** — create child spans inside any traced function; nesting is tracked automatically
+- **`TracedAnthropic` / `TracedAsyncAnthropic`** — thin wrappers around the Anthropic SDK that capture model name, prompt messages, completion text, and token counts as `llm`-kind spans; import is guarded so `anthropic` remains an optional dependency
+- Unit tests covering models, decorator behaviour (sync + async), span nesting, context propagation, and the Anthropic wrapper
 
 ---
 
 ## Planned features
 
-- **Structured tracing** — `@traced` decorator + context-managed spans capture every LLM call, tool invocation, agent handoff, memory read/write, and retry
 - **Live dashboard** — React SPA with Gantt-style timeline, hierarchical call tree, and per-span inspector (prompts, outputs, tool args, token counts, latency)
 - **Rubric evals** — define YAML rubrics, run Claude-as-judge against completed traces, get pass/fail + reasoning surfaced next to the trace
 - **Framework-agnostic** — works with raw Anthropic SDK, LangGraph, or any custom orchestrator
@@ -54,7 +61,7 @@ flowchart LR
 
 ## Quickstart
 
-Install dependencies and verify the scaffold:
+Install dependencies and run the test suite:
 
 ```bash
 make install   # installs Python packages (uv) + Node modules
@@ -68,10 +75,34 @@ Install pre-commit hooks:
 pre-commit install
 ```
 
+Instrument your agent code with the SDK:
+
+```python
+from agentlens import configure, traced, span
+from agentlens.anthropic_wrap import TracedAnthropic
+
+configure(endpoint="http://localhost:8000")  # collector not yet running — events are buffered/dropped gracefully
+
+client = TracedAnthropic()  # drop-in for anthropic.Anthropic()
+
+@traced
+async def research(query: str) -> str:
+    async with span("fetch-context"):
+        # ... retrieve documents ...
+        pass
+
+    response = await client.messages.create(
+        model="claude-opus-4-6",
+        max_tokens=1024,
+        messages=[{"role": "user", "content": query}],
+    )
+    return response.content[0].text
+```
+
 > **Docker, `make dev`, and the demo script are not yet wired up.** They land in M3 (server), M4 (dashboard), and M7 (demo agent) respectively. The full one-liner below is the M7+ target:
 >
 > ```bash
-> # M7+ target — not functional in M1
+> # M7+ target — not functional yet
 > docker compose --profile full up
 > python examples/research_assistant.py "How did SpaceX land Starship?"
 > ```
@@ -82,12 +113,19 @@ pre-commit install
 
 ```
 agent-lens/
-├── sdk/                  # agentlens Python package (pip install agentlens)
-├── server/               # FastAPI collector + eval runner
-├── dashboard/            # React/Vite SPA
-├── examples/             # Demo agents (research_assistant.py, …)
-├── rubrics/              # YAML eval rubric definitions
-└── docs/                 # Screenshots, GIF, architecture diagrams
+├── sdk/                        # agentlens Python package (pip install agentlens)
+│   ├── agentlens/
+│   │   ├── models.py           # Pydantic v2: Run, Span, SpanKind, TraceEvent
+│   │   ├── context.py          # contextvars: run_id / span_id propagation
+│   │   ├── client.py           # TraceClient, configure()
+│   │   ├── decorators.py       # @traced, span(), async_span()
+│   │   └── anthropic_wrap.py   # TracedAnthropic / TracedAsyncAnthropic
+│   └── tests/
+├── server/                     # FastAPI collector + eval runner (M3)
+├── dashboard/                  # React/Vite SPA (M4)
+├── examples/                   # Demo agents (M7)
+├── rubrics/                    # YAML eval rubric definitions (M6)
+└── docs/                       # Screenshots, GIF, architecture diagrams
 ```
 
 ---
@@ -96,14 +134,14 @@ agent-lens/
 
 | # | Name | Status |
 |---|------|--------|
-| M1 | Scaffold + README | ✅ done |
-| M2 | SDK core (`@traced`, `TraceClient`) | ⬜ planned |
-| M3 | FastAPI collector + SQLite schema | ⬜ planned |
-| M4 | Dashboard run list + span tree | ⬜ planned |
-| M5 | Timeline (Gantt) view | ⬜ planned |
-| M6 | Eval harness + rubric runner | ⬜ planned |
-| M7 | Demo agent (research assistant) | ⬜ planned |
-| M8 | Polish + demo GIF + docs | ⬜ planned |
+| M1 | Scaffold + README | done |
+| M2 | Trace schema + Python SDK | done |
+| M3 | FastAPI collector + SQLite schema | planned |
+| M4 | Dashboard run list + span tree | planned |
+| M5 | Timeline (Gantt) view | planned |
+| M6 | Eval harness + rubric runner | planned |
+| M7 | Demo agent (research assistant) | planned |
+| M8 | Polish + demo GIF + docs | planned |
 
 ---
 
