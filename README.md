@@ -7,7 +7,7 @@
 
 AgentLens is a self-hosted dashboard that turns chaotic agent runs into structured, inspectable traces — with a built-in rubric eval harness powered by Claude-as-judge. Framework-agnostic, local-first, no cloud required.
 
-> **M2 shipped.** The trace schema and Python SDK are complete and tested. The FastAPI collector and dashboard land in M3–M4.
+> **M3 shipped.** The FastAPI collector, SQLite storage, and SSE stream are complete and integration-tested. The React dashboard lands in M4.
 
 ---
 
@@ -30,12 +30,21 @@ AgentLens is a self-hosted dashboard that turns chaotic agent runs into structur
 - **`TracedAnthropic` / `TracedAsyncAnthropic`** — thin wrappers around the Anthropic SDK that capture model name, prompt messages, completion text, and token counts as `llm`-kind spans; import is guarded so `anthropic` remains an optional dependency
 - Unit tests covering models, decorator behaviour (sync + async), span nesting, context propagation, and the Anthropic wrapper
 
+### M3 — FastAPI collector + SQLite storage
+- **`POST /v1/traces`** — batch-ingest endpoint accepts a `TraceEvent` list; writes runs and spans to SQLite in a single transaction
+- **`GET /v1/runs`** — returns all runs ordered by start time, with status and token-count summaries
+- **`GET /v1/runs/{id}/spans`** — returns every span for a run, preserving parent–child relationships
+- **`GET /v1/stream`** — SSE endpoint; each new span is fanned out in real time to all connected subscribers via `SSEBroadcaster` (per-subscriber `asyncio.Queue`)
+- **SQLite schema** — async SQLAlchemy engine; `runs` and `spans` tables with indexes on `run_id` and `parent_span_id` for fast tree queries
+- **CORS** — `allow_origins=["*"]` for local dashboard development
+- **Integration tests** — 9 tests run the SDK against a live in-process collector; cover ingest, retrieval, and SSE delivery
+
 ---
 
 ## Planned features
 
-- **Live dashboard** — React SPA with Gantt-style timeline, hierarchical call tree, and per-span inspector (prompts, outputs, tool args, token counts, latency)
-- **Rubric evals** — define YAML rubrics, run Claude-as-judge against completed traces, get pass/fail + reasoning surfaced next to the trace
+- **Live dashboard** — React SPA with Gantt-style timeline, hierarchical call tree, and per-span inspector (prompts, outputs, tool args, token counts, latency) — M4
+- **Rubric evals** — define YAML rubrics, run Claude-as-judge against completed traces, get pass/fail + reasoning surfaced next to the trace — M6
 - **Framework-agnostic** — works with raw Anthropic SDK, LangGraph, or any custom orchestrator
 - **Local-first** — SQLite persistence, single `docker compose up`, no cloud accounts
 
@@ -81,7 +90,7 @@ Instrument your agent code with the SDK:
 from agentlens import configure, traced, span
 from agentlens.anthropic_wrap import TracedAnthropic
 
-configure(endpoint="http://localhost:8000")  # collector not yet running — events are buffered/dropped gracefully
+configure(endpoint="http://localhost:8000")  # start the collector first: cd server && uvicorn agentlens_server.main:app
 
 client = TracedAnthropic()  # drop-in for anthropic.Anthropic()
 
@@ -99,7 +108,7 @@ async def research(query: str) -> str:
     return response.content[0].text
 ```
 
-> **Docker, `make dev`, and the demo script are not yet wired up.** They land in M3 (server), M4 (dashboard), and M7 (demo agent) respectively. The full one-liner below is the M7+ target:
+> **`make dev` and the demo script are not yet wired up.** They land in M4 (dashboard) and M7 (demo agent) respectively. The full one-liner below is the M7+ target:
 >
 > ```bash
 > # M7+ target — not functional yet
@@ -121,7 +130,12 @@ agent-lens/
 │   │   ├── decorators.py       # @traced, span(), async_span()
 │   │   └── anthropic_wrap.py   # TracedAnthropic / TracedAsyncAnthropic
 │   └── tests/
-├── server/                     # FastAPI collector + eval runner (M3)
+├── server/                     # FastAPI collector + SQLite storage
+│   ├── agentlens_server/
+│   │   ├── main.py             # FastAPI app: /v1/traces, /v1/runs, /v1/stream
+│   │   ├── db.py               # SQLAlchemy async engine, runs/spans schema
+│   │   └── sse.py              # SSEBroadcaster fan-out
+│   └── tests/                  # 9 integration tests
 ├── dashboard/                  # React/Vite SPA (M4)
 ├── examples/                   # Demo agents (M7)
 ├── rubrics/                    # YAML eval rubric definitions (M6)
@@ -136,7 +150,7 @@ agent-lens/
 |---|------|--------|
 | M1 | Scaffold + README | done |
 | M2 | Trace schema + Python SDK | done |
-| M3 | FastAPI collector + SQLite schema | planned |
+| M3 | FastAPI collector + SQLite schema | done |
 | M4 | Dashboard run list + span tree | planned |
 | M5 | Timeline (Gantt) view | planned |
 | M6 | Eval harness + rubric runner | planned |
