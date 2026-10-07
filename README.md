@@ -7,7 +7,7 @@
 
 AgentLens is a self-hosted dashboard that turns chaotic agent runs into structured, inspectable traces — with a built-in rubric eval harness powered by Claude-as-judge. Framework-agnostic, local-first, no cloud required.
 
-> **M4 shipped.** The React dashboard is live: run list with live SSE updates, Gantt-style span timeline, deep-linkable run URLs. M5 (call-tree inspector) comes next.
+> **M5 shipped.** Call-tree + span inspector are live. Click any span in the Gantt or tree to open the inspector (Input / Output / Metadata / Raw tabs). M6 (rubric evals) comes next.
 
 ---
 
@@ -47,12 +47,19 @@ AgentLens is a self-hosted dashboard that turns chaotic agent runs into structur
 - **Deep-links** — `/runs/:runId` URLs work directly; Vite dev server proxies `/v1/*` to `http://localhost:8000`
 - **7 unit tests** — `api.test.ts` covers fetch wrappers; `GanttChart.test.tsx` covers span rendering, running-span animation, and bar sizing
 
+
+### M5 — Dashboard: call tree + span inspector
+- **Collapsible call tree** — right-hand panel in run detail; spans rendered as an indented hierarchy derived from `parent_span_id`; root nodes start expanded, deeper nodes start collapsed; kind-colored dots + duration for each node
+- **Span inspector** — opens below the timeline when a span is clicked (in either the Gantt or the tree); four tabs: **Input** (markdown), **Output** (markdown), **Metadata** (latency, model, per-span and subtree token counts), **Raw** (pretty JSON of attributes); closeable with `×`
+- **Clickable Gantt bars** — clicking a bar or label selects that span and highlights it with a white ring
+- **`src/lib/tree.ts`** — pure helpers `buildChildMap` / `getSubtreeIds` for tree construction and subtree token rollups
+- **24 unit tests across 5 files** — `tree.test.ts`, `CallTree.test.tsx`, `SpanInspector.test.tsx` (all new) plus existing `GanttChart.test.tsx` and `api.test.ts`
+
 ---
 
 ## Planned features
 
-- **Call-tree inspector** — hierarchical call tree with per-span inspector (prompts, outputs, tool args, token counts, latency) — M5
-- **Rubric evals** — define YAML rubrics, run Claude-as-judge against completed traces, get pass/fail + reasoning surfaced next to the trace — M6
+- **Rubric evals** — define YAML rubrics, run Claude-as-judge against completed traces, get pass/fail + reasoning surfaced next to the trace — M6 (next)
 - **Framework-agnostic** — works with raw Anthropic SDK, LangGraph, or any custom orchestrator
 - **Local-first** — SQLite persistence, single `docker compose up`, no cloud accounts
 
@@ -98,7 +105,7 @@ Start the dashboard (dev mode, proxies `/v1/*` to `localhost:8000`):
 cd dashboard
 npm install
 npm run dev      # → http://localhost:5173
-npm test         # run 7 unit tests
+npm test         # run 24 unit tests
 ```
 
 Instrument your agent code with the SDK:
@@ -153,17 +160,20 @@ agent-lens/
 │   │   ├── db.py               # SQLAlchemy async engine, runs/spans schema
 │   │   └── sse.py              # SSEBroadcaster fan-out
 │   └── tests/                  # 9 integration tests
-├── dashboard/                  # React/Vite SPA (M4 complete)
+├── dashboard/                  # React/Vite SPA (M5 complete)
 │   ├── src/
 │   │   ├── types.ts            # TypeScript interfaces: Run, Span, TraceEvent, KIND_COLORS
 │   │   ├── api.ts              # Typed fetch wrappers: getRuns(), getSpans()
 │   │   ├── hooks/useSSE.ts     # SSE hook with auto-reconnect
 │   │   ├── pages/RunList.tsx   # Run table with live SSE updates
-│   │   ├── pages/RunDetail.tsx # Gantt timeline + run header
+│   │   ├── pages/RunDetail.tsx # Gantt + call tree + span inspector
 │   │   ├── components/
-│   │   │   ├── StatusBadge.tsx # Status pill (running/completed/failed)
-│   │   │   └── GanttChart.tsx  # CSS proportional Gantt with hover tooltips
-│   │   └── __tests__/          # 7 vitest unit tests
+│   │   │   ├── StatusBadge.tsx    # Status pill (running/completed/failed)
+│   │   │   ├── GanttChart.tsx     # CSS proportional Gantt with hover tooltips
+│   │   │   ├── CallTree.tsx       # Collapsible span hierarchy tree
+│   │   │   └── SpanInspector.tsx  # 4-tab per-span detail pane
+│   │   ├── lib/tree.ts         # buildChildMap, getSubtreeIds helpers
+│   │   └── __tests__/          # 24 vitest unit tests
 ├── examples/                   # Demo agents (M7)
 ├── rubrics/                    # YAML eval rubric definitions (M6)
 └── docs/                       # Screenshots, GIF, architecture diagrams
@@ -179,7 +189,7 @@ agent-lens/
 | M2 | Trace schema + Python SDK | done |
 | M3 | FastAPI collector + SQLite schema | done |
 | M4 | Dashboard run list + Gantt timeline | done |
-| M5 | Span call-tree + per-span inspector | planned |
+| M5 | Span call-tree + per-span inspector | done |
 | M6 | Eval harness + rubric runner | planned |
 | M7 | Demo agent (research assistant) | planned |
 | M8 | Polish + demo GIF + docs | planned |

@@ -11,9 +11,11 @@ interface TooltipInfo {
 interface Props {
   spans: Span[]
   runStartedAt: string
+  selectedSpanId?: string | null
+  onSpanClick?: (spanId: string) => void
 }
 
-export default function GanttChart({ spans, runStartedAt }: Props) {
+export default function GanttChart({ spans, runStartedAt, selectedSpanId, onSpanClick }: Props) {
   const [tooltip, setTooltip] = useState<TooltipInfo | null>(null)
 
   const runStart = Date.parse(runStartedAt)
@@ -43,21 +45,28 @@ export default function GanttChart({ spans, runStartedAt }: Props) {
           const isRunning = span.ended_at === null
           const colorClass = KIND_COLORS[span.kind] ?? 'bg-zinc-500'
 
+          const isSelected = span.span_id === selectedSpanId
+
           return (
             <div key={span.span_id} className="flex items-center mb-1 group">
               {/* label */}
-              <div className="w-[200px] shrink-0 pr-2 text-xs text-zinc-300 truncate" title={span.name}>
+              <div
+                className={`w-[200px] shrink-0 pr-2 text-xs truncate cursor-pointer ${isSelected ? 'text-zinc-100' : 'text-zinc-300'}`}
+                title={span.name}
+                onClick={() => onSpanClick?.(span.span_id)}
+              >
                 {span.name}
               </div>
 
               {/* bar track */}
               <div className="flex-1 relative h-5 bg-zinc-800 rounded">
                 <div
-                  className={`absolute h-full rounded ${colorClass} ${isRunning ? 'animate-pulse' : ''}`}
+                  className={`absolute h-full rounded ${colorClass} ${isRunning ? 'animate-pulse' : ''} ${isSelected ? 'ring-2 ring-white' : ''} cursor-pointer`}
                   style={{
                     left: `${offsetPct}%`,
                     width: `${widthPct}%`,
                   }}
+                  onClick={() => onSpanClick?.(span.span_id)}
                   onMouseEnter={(e) => setTooltip({ span, x: e.clientX, y: e.clientY })}
                   onMouseLeave={() => setTooltip(null)}
                 />
