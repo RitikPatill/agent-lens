@@ -7,7 +7,7 @@
 
 AgentLens is a self-hosted dashboard that turns chaotic agent runs into structured, inspectable traces — with a built-in rubric eval harness powered by Claude-as-judge. Framework-agnostic, local-first, no cloud required.
 
-> **M3 shipped.** The FastAPI collector, SQLite storage, and SSE stream are complete and integration-tested. The React dashboard lands in M4.
+> **M4 shipped.** The React dashboard is live: run list with live SSE updates, Gantt-style span timeline, deep-linkable run URLs. M5 (call-tree inspector) comes next.
 
 ---
 
@@ -39,11 +39,19 @@ AgentLens is a self-hosted dashboard that turns chaotic agent runs into structur
 - **CORS** — `allow_origins=["*"]` for local dashboard development
 - **Integration tests** — 9 tests run the SDK against a live in-process collector; cover ingest, retrieval, and SSE delivery
 
+### M4 — Dashboard: run list + live timeline
+- **Run list page (`/`)** — table of all runs with status badge, name, started-at (relative time), duration, model, and token count; rows link to run detail
+- **Run detail page (`/runs/:runId`)** — Gantt-style timeline of spans, color-coded by kind (`llm`=blue, `tool`=orange, `agent`=purple, `memory`=green, `retry`=red); hover tooltip shows name, kind, duration, and token counts
+- **Live SSE tailing** — running runs stream new spans in without a page refresh; Gantt bars grow in real time via 1-second tick
+- **Status badges** — green/amber (pulsing)/red for completed/running/failed
+- **Deep-links** — `/runs/:runId` URLs work directly; Vite dev server proxies `/v1/*` to `http://localhost:8000`
+- **7 unit tests** — `api.test.ts` covers fetch wrappers; `GanttChart.test.tsx` covers span rendering, running-span animation, and bar sizing
+
 ---
 
 ## Planned features
 
-- **Live dashboard** — React SPA with Gantt-style timeline, hierarchical call tree, and per-span inspector (prompts, outputs, tool args, token counts, latency) — M4
+- **Call-tree inspector** — hierarchical call tree with per-span inspector (prompts, outputs, tool args, token counts, latency) — M5
 - **Rubric evals** — define YAML rubrics, run Claude-as-judge against completed traces, get pass/fail + reasoning surfaced next to the trace — M6
 - **Framework-agnostic** — works with raw Anthropic SDK, LangGraph, or any custom orchestrator
 - **Local-first** — SQLite persistence, single `docker compose up`, no cloud accounts
@@ -84,6 +92,15 @@ Install pre-commit hooks:
 pre-commit install
 ```
 
+Start the dashboard (dev mode, proxies `/v1/*` to `localhost:8000`):
+
+```bash
+cd dashboard
+npm install
+npm run dev      # → http://localhost:5173
+npm test         # run 7 unit tests
+```
+
 Instrument your agent code with the SDK:
 
 ```python
@@ -108,7 +125,7 @@ async def research(query: str) -> str:
     return response.content[0].text
 ```
 
-> **`make dev` and the demo script are not yet wired up.** They land in M4 (dashboard) and M7 (demo agent) respectively. The full one-liner below is the M7+ target:
+> **`make dev` and the demo script are not yet wired up.** `make dev` will become a single-command launcher in a later milestone; the demo script lands in M7. The full one-liner below is the M7+ target:
 >
 > ```bash
 > # M7+ target — not functional yet
@@ -136,7 +153,17 @@ agent-lens/
 │   │   ├── db.py               # SQLAlchemy async engine, runs/spans schema
 │   │   └── sse.py              # SSEBroadcaster fan-out
 │   └── tests/                  # 9 integration tests
-├── dashboard/                  # React/Vite SPA (M4)
+├── dashboard/                  # React/Vite SPA (M4 complete)
+│   ├── src/
+│   │   ├── types.ts            # TypeScript interfaces: Run, Span, TraceEvent, KIND_COLORS
+│   │   ├── api.ts              # Typed fetch wrappers: getRuns(), getSpans()
+│   │   ├── hooks/useSSE.ts     # SSE hook with auto-reconnect
+│   │   ├── pages/RunList.tsx   # Run table with live SSE updates
+│   │   ├── pages/RunDetail.tsx # Gantt timeline + run header
+│   │   ├── components/
+│   │   │   ├── StatusBadge.tsx # Status pill (running/completed/failed)
+│   │   │   └── GanttChart.tsx  # CSS proportional Gantt with hover tooltips
+│   │   └── __tests__/          # 7 vitest unit tests
 ├── examples/                   # Demo agents (M7)
 ├── rubrics/                    # YAML eval rubric definitions (M6)
 └── docs/                       # Screenshots, GIF, architecture diagrams
@@ -151,8 +178,8 @@ agent-lens/
 | M1 | Scaffold + README | done |
 | M2 | Trace schema + Python SDK | done |
 | M3 | FastAPI collector + SQLite schema | done |
-| M4 | Dashboard run list + span tree | planned |
-| M5 | Timeline (Gantt) view | planned |
+| M4 | Dashboard run list + Gantt timeline | done |
+| M5 | Span call-tree + per-span inspector | planned |
 | M6 | Eval harness + rubric runner | planned |
 | M7 | Demo agent (research assistant) | planned |
 | M8 | Polish + demo GIF + docs | planned |
