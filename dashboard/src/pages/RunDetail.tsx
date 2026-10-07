@@ -5,6 +5,8 @@ import { getRuns, getSpans } from '../api'
 import { useSSE } from '../hooks/useSSE'
 import StatusBadge from '../components/StatusBadge'
 import GanttChart from '../components/GanttChart'
+import CallTree from '../components/CallTree'
+import SpanInspector from '../components/SpanInspector'
 import type { Run, Span, TraceEvent } from '../types'
 
 function formatDuration(run: Run): string {
@@ -20,6 +22,7 @@ export default function RunDetail() {
   const [spans, setSpans] = useState<Span[]>([])
   const [error, setError] = useState<string | null>(null)
   const [, setTick] = useState(0)
+  const [selectedSpanId, setSelectedSpanId] = useState<string | null>(null)
 
   useEffect(() => {
     if (!runId) return
@@ -66,6 +69,8 @@ export default function RunDetail() {
 
   useSSE(onEvent)
 
+  const selectedSpan = selectedSpanId ? spans.find((s) => s.span_id === selectedSpanId) ?? null : null
+
   if (error) {
     return (
       <div>
@@ -88,6 +93,7 @@ export default function RunDetail() {
     <div>
       <Link to="/" className="text-zinc-400 hover:text-zinc-200 text-sm">← Back to runs</Link>
 
+      {/* run header */}
       <div className="mt-4 mb-6">
         <div className="flex items-center gap-3 mb-1">
           <h1 className="text-xl font-semibold">{run.name}</h1>
@@ -104,7 +110,31 @@ export default function RunDetail() {
       {spans.length === 0 ? (
         <p className="text-zinc-500 text-sm">No spans yet.</p>
       ) : (
-        <GanttChart spans={spans} runStartedAt={run.started_at} />
+        <>
+          {/* two-column: Gantt left, CallTree right */}
+          <div className="grid grid-cols-[1fr_300px] gap-4">
+            <GanttChart
+              spans={spans}
+              runStartedAt={run.started_at}
+              selectedSpanId={selectedSpanId}
+              onSpanClick={setSelectedSpanId}
+            />
+            <CallTree
+              spans={spans}
+              selectedSpanId={selectedSpanId}
+              onSelect={setSelectedSpanId}
+            />
+          </div>
+
+          {/* span inspector panel */}
+          {selectedSpan && (
+            <SpanInspector
+              span={selectedSpan}
+              allSpans={spans}
+              onClose={() => setSelectedSpanId(null)}
+            />
+          )}
+        </>
       )}
     </div>
   )
