@@ -40,6 +40,20 @@ spans_table = Table(
 Index("idx_spans_run_id", spans_table.c.run_id)
 Index("idx_spans_parent", spans_table.c.parent_span_id)
 
+evals_table = Table(
+    "evals",
+    metadata,
+    Column("eval_id", Text, primary_key=True),
+    Column("run_id", Text, nullable=False),
+    Column("rubric_name", Text, nullable=False),
+    Column("status", Text, nullable=False, server_default="pending"),
+    Column("reasoning", Text),
+    Column("created_at", Text, nullable=False),
+    Column("completed_at", Text),
+)
+
+Index("idx_evals_run_id", evals_table.c.run_id)
+
 # Module-level engine — starts as None, set lazily in init_db()
 engine: Any = None
 AsyncSessionLocal: Any = None
@@ -81,4 +95,16 @@ def decode_span_row(row: Any) -> dict:
         "started_at": row.started_at,
         "ended_at": row.ended_at,
         "attributes": json.loads(row.attributes) if row.attributes else {},
+    }
+
+
+def decode_eval_row(row: Any) -> dict:
+    return {
+        "eval_id": row.eval_id,
+        "run_id": row.run_id,
+        "rubric_name": row.rubric_name,
+        "status": row.status,
+        "reasoning": row.reasoning,
+        "created_at": row.created_at,
+        "completed_at": row.completed_at,
     }

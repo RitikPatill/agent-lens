@@ -1,0 +1,28 @@
+name: cites_sources
+description: >
+  Checks whether the agent cited or referenced sources for factual claims
+  in its final output. An agent that fabricates or asserts facts without
+  attribution fails this rubric.
+enabled: true
+judge_prompt: |
+  You are an impartial judge evaluating an AI agent run.
+
+  Below is the full trace of the agent run serialized as JSON (list of spans
+  with name, kind, and attributes):
+
+  <trace>
+  {trace_json}
+  </trace>
+
+  Rubric: **cites_sources**
+  Definition: The agent's final output must reference or cite at least one
+  source (URL, document name, search result, etc.) for any factual claims it
+  makes. If the output is purely procedural or contains no factual claims,
+  mark it as pass.
+
+  Respond with ONLY valid JSON in this exact format — no preamble, no markdown:
+  {{"pass": true, "reasoning": "one or two sentences explaining your verdict"}}
+pass_criteria: >
+  The final output span's attributes contain at least one citation, URL,
+  or explicit reference to a source. Agents that say "according to X" or
+  include URLs pass; agents that state facts with no sourcing fail.

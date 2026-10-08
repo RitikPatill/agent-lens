@@ -1,0 +1,28 @@
+name: no_redundant_tool_calls
+description: >
+  Checks that the agent did not call the same tool with identical (or
+  near-identical) arguments more than once within the same run. Redundant
+  calls waste tokens and indicate a planning failure.
+enabled: true
+judge_prompt: |
+  You are an impartial judge evaluating an AI agent run.
+
+  Below is the full trace of the agent run serialized as JSON (list of spans
+  with name, kind, and attributes):
+
+  <trace>
+  {trace_json}
+  </trace>
+
+  Rubric: **no_redundant_tool_calls**
+  Definition: No tool span should be called more than once with the same
+  tool name and the same (or substantively identical) input arguments. A
+  second call is acceptable only if the first call returned an error or
+  produced a result that makes the second call meaningfully different in
+  intent.
+
+  Respond with ONLY valid JSON in this exact format — no preamble, no markdown:
+  {{"pass": true, "reasoning": "one or two sentences explaining your verdict"}}
+pass_criteria: >
+  All tool calls within the trace have distinct (tool_name, input) pairs, or
+  any duplicated calls are clearly justified by an intervening error response.

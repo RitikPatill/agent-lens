@@ -28,6 +28,18 @@ export interface TraceEvent {
   span: Span | null
 }
 
+export type EvalStatus = 'pending' | 'running' | 'pass' | 'fail' | 'error'
+
+export interface Eval {
+  eval_id: string
+  run_id: string
+  rubric_name: string
+  status: EvalStatus
+  reasoning: string | null
+  created_at: string
+  completed_at: string | null
+}
+
 export const KIND_COLORS: Record<SpanKind, string> = {
   llm: 'bg-blue-500',
   tool: 'bg-orange-500',

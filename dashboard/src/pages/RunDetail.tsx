@@ -1,13 +1,14 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { formatDistanceToNow } from 'date-fns'
-import { getRuns, getSpans } from '../api'
+import { getRuns, getSpans, getEvals } from '../api'
 import { useSSE } from '../hooks/useSSE'
 import StatusBadge from '../components/StatusBadge'
 import GanttChart from '../components/GanttChart'
 import CallTree from '../components/CallTree'
 import SpanInspector from '../components/SpanInspector'
-import type { Run, Span, TraceEvent } from '../types'
+import EvalPanel from '../components/EvalPanel'
+import type { Eval, Run, Span, TraceEvent } from '../types'
 
 function formatDuration(run: Run): string {
   if (!run.ended_at) return 'running…'
@@ -20,14 +21,16 @@ export default function RunDetail() {
   const { runId } = useParams<{ runId: string }>()
   const [run, setRun] = useState<Run | null>(null)
   const [spans, setSpans] = useState<Span[]>([])
+  const [evals, setEvals] = useState<Eval[]>([])
   const [error, setError] = useState<string | null>(null)
   const [, setTick] = useState(0)
   const [selectedSpanId, setSelectedSpanId] = useState<string | null>(null)
+  const evalPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   useEffect(() => {
     if (!runId) return
-    Promise.all([getRuns(), getSpans(runId)])
-      .then(([allRuns, fetchedSpans]) => {
+    Promise.all([getRuns(), getSpans(runId), getEvals(runId)])
+      .then(([allRuns, fetchedSpans, fetchedEvals]) => {
         const found = allRuns.find((r) => r.run_id === runId) ?? null
         if (!found) {
           setError('Run not found')
@@ -35,9 +38,36 @@ export default function RunDetail() {
         }
         setRun(found)
         setSpans(fetchedSpans)
+        setEvals(fetchedEvals)
       })
       .catch((e: Error) => setError(e.message))
   }, [runId])
+
+  // Poll evals every 3s while run is running; stop when all are terminal
+  useEffect(() => {
+    if (!runId || !run) return
+    const TERMINAL = new Set(['pass', 'fail', 'error'])
+    const allTerminal = (es: Eval[]) => es.length > 0 && es.every((e) => TERMINAL.has(e.status))
+
+    if (run.status !== 'running' && allTerminal(evals)) return
+
+    if (evalPollRef.current) clearInterval(evalPollRef.current)
+    evalPollRef.current = setInterval(() => {
+      getEvals(runId)
+        .then((fetched) => {
+          setEvals(fetched)
+          if (run.status !== 'running' && allTerminal(fetched)) {
+            clearInterval(evalPollRef.current!)
+            evalPollRef.current = null
+          }
+        })
+        .catch(() => {/* ignore poll errors */})
+    }, 3000)
+
+    return () => {
+      if (evalPollRef.current) clearInterval(evalPollRef.current)
+    }
+  }, [runId, run?.status])
 
   // re-render every second while run is live so Gantt bars grow
   useEffect(() => {
@@ -51,6 +81,8 @@ export default function RunDetail() {
       if (!runId) return
       if (e.event_type === 'run_end' && e.run?.run_id === runId) {
         setRun((prev) => (prev ? { ...prev, ...e.run! } : prev))
+        // Fetch evals once after run completes
+        getEvals(runId).then(setEvals).catch(() => {/* ignore */})
       }
       if (e.event_type === 'span_start' && e.span?.run_id === runId) {
         setSpans((prev) => {
@@ -134,6 +166,8 @@ export default function RunDetail() {
               onClose={() => setSelectedSpanId(null)}
             />
           )}
+
+          <EvalPanel evals={evals} />
         </>
       )}
     </div>
