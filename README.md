@@ -7,7 +7,7 @@
 
 AgentLens is a self-hosted dashboard that turns chaotic agent runs into structured, inspectable traces — with a built-in rubric eval harness powered by Claude-as-judge. Framework-agnostic, local-first, no cloud required.
 
-> **M6 shipped.** Rubric eval harness is live. Define YAML rubrics in `rubrics/`, run a completed trace through Claude-as-judge automatically, and view pass/fail + reasoning in the run detail page. M7 (demo agent) comes next.
+> **M7 shipped.** Example multi-agent demo is live. Run `python examples/research_assistant.py "How did SpaceX land Starship?"` against a running collector to watch a Planner → 2× Researcher (parallel) → Writer pipeline stream into the dashboard in real time. Three rubrics (`cites_sources`, `no_redundant_tool_calls`, `answer_addresses_question`) evaluate the completed run automatically.
 
 ---
 
@@ -66,11 +66,19 @@ AgentLens is a self-hosted dashboard that turns chaotic agent runs into structur
 - **Eval polling** — `RunDetail` page polls `/v1/runs/{id}/evals` every 3s while run is live; stops when all evals reach terminal status
 - **6 integration tests** — `server/tests/test_evals.py` covering rubric loading, trace serialisation, empty endpoint, trigger assertion, and result retrieval
 
+### M7 — Example multi-agent demo
+- **`examples/research_assistant.py`** — fully-instrumented async pipeline: Planner generates 2 search queries → 2 Researchers run in parallel (each calls a mocked web-search tool + LLM summariser) → Writer composes the final cited answer
+- **Canned search fixtures** — 10 entries covering SpaceX Starship topics; no paid search API required
+- **Full AgentLens instrumentation** — `@traced(kind=SpanKind.agent)` on each agent function, `async_span("web_search", kind=SpanKind.tool)` for each search call, manual `start_run`/`end_run` with `RunStatus`
+- **`TracedAsyncAnthropic`** — all LLM calls captured as `llm`-kind spans with token counts
+- **`rubrics/answer_addresses_question.yaml`** — third rubric completing the eval suite; checks the writer's answer directly addresses the original question
+- **3 unit tests** — `examples/tests/test_research_assistant.py`; covers `mock_search` hit/miss and full pipeline with mocked Anthropic (≥4 LLM calls asserted, no network)
+- Run with: `py -3.11 -m pytest examples/tests/ -v`
+
 ---
 
 ## Planned features
 
-- **Demo agent** — 3-agent research assistant (Planner → Researcher → Writer) — M7 (next)
 - **Framework-agnostic** — works with raw Anthropic SDK, LangGraph, or any custom orchestrator
 - **Local-first** — SQLite persistence, single `docker compose up`, no cloud accounts
 
@@ -143,13 +151,17 @@ async def research(query: str) -> str:
     return response.content[0].text
 ```
 
-> **`make dev` and the demo script are not yet wired up.** `make dev` will become a single-command launcher in a later milestone; the demo script lands in M7. The full one-liner below is the M7+ target:
->
-> ```bash
-> # M7+ target — not functional yet
-> docker compose --profile full up
-> python examples/research_assistant.py "How did SpaceX land Starship?"
-> ```
+Run the example demo (requires a running collector at `localhost:8080` and an `ANTHROPIC_API_KEY`):
+
+```bash
+# Start the collector
+cd server && uvicorn agentlens_server.main:app --port 8080
+
+# In another terminal, run the demo
+python examples/research_assistant.py "How did SpaceX land Starship?"
+```
+
+> **`make dev`** will become a single-command launcher in a later milestone.
 
 ---
 
@@ -187,10 +199,13 @@ agent-lens/
 │   │   │   └── EvalPanel.tsx      # Pass/fail badges with hover-reasoning
 │   │   ├── lib/tree.ts         # buildChildMap, getSubtreeIds helpers
 │   │   └── __tests__/          # 24 vitest unit tests
-├── examples/                   # Demo agents (M7)
+├── examples/                   # Demo agents
+│   ├── research_assistant.py   # Planner → 2× Researcher → Writer pipeline (M7)
+│   └── tests/                  # 3 unit tests (mock_search hit/miss + pipeline)
 ├── rubrics/                    # YAML eval rubric definitions
 │   ├── cites_sources.yaml      # Did the agent cite sources?
-│   └── no_redundant_tool_calls.yaml  # Did the agent avoid duplicate tool calls?
+│   ├── no_redundant_tool_calls.yaml  # Did the agent avoid duplicate tool calls?
+│   └── answer_addresses_question.yaml  # Does the answer address the question? (M7)
 └── docs/                       # Screenshots, GIF, architecture diagrams
 ```
 
@@ -206,7 +221,7 @@ agent-lens/
 | M4 | Dashboard run list + Gantt timeline | done |
 | M5 | Span call-tree + per-span inspector | done |
 | M6 | Eval harness + rubric runner | done |
-| M7 | Demo agent (research assistant) | planned |
+| M7 | Demo agent (research assistant) | done |
 | M8 | Polish + demo GIF + docs | planned |
 
 ---
