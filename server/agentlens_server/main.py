@@ -10,7 +10,8 @@ from sqlalchemy import text
 
 from agentlens.models import TraceEvent
 
-from .db import decode_run_row, decode_span_row, get_db, init_db
+from .db import decode_eval_row, decode_run_row, decode_span_row, get_db, init_db
+from .eval_runner import run_evals_for_run
 from .sse import broadcaster
 
 
@@ -72,6 +73,7 @@ async def ingest_trace(event: TraceEvent):
                 },
             )
             await db.commit()
+            asyncio.create_task(run_evals_for_run(run.run_id))
 
         elif event.event_type == "span_start" and event.span is not None:
             span = event.span
@@ -145,6 +147,17 @@ async def list_spans(run_id: str):
         )
         rows = result.fetchall()
         return [decode_span_row(row) for row in rows]
+
+
+@app.get("/v1/runs/{run_id}/evals")
+async def list_evals(run_id: str):
+    async for db in get_db():
+        result = await db.execute(
+            text("SELECT * FROM evals WHERE run_id = :run_id ORDER BY created_at ASC"),
+            {"run_id": run_id},
+        )
+        rows = result.fetchall()
+        return [decode_eval_row(row) for row in rows]
 
 
 @app.get("/v1/stream")

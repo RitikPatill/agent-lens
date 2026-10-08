@@ -7,7 +7,7 @@
 
 AgentLens is a self-hosted dashboard that turns chaotic agent runs into structured, inspectable traces — with a built-in rubric eval harness powered by Claude-as-judge. Framework-agnostic, local-first, no cloud required.
 
-> **M5 shipped.** Call-tree + span inspector are live. Click any span in the Gantt or tree to open the inspector (Input / Output / Metadata / Raw tabs). M6 (rubric evals) comes next.
+> **M6 shipped.** Rubric eval harness is live. Define YAML rubrics in `rubrics/`, run a completed trace through Claude-as-judge automatically, and view pass/fail + reasoning in the run detail page. M7 (demo agent) comes next.
 
 ---
 
@@ -55,11 +55,22 @@ AgentLens is a self-hosted dashboard that turns chaotic agent runs into structur
 - **`src/lib/tree.ts`** — pure helpers `buildChildMap` / `getSubtreeIds` for tree construction and subtree token rollups
 - **24 unit tests across 5 files** — `tree.test.ts`, `CallTree.test.tsx`, `SpanInspector.test.tsx` (all new) plus existing `GanttChart.test.tsx` and `api.test.ts`
 
+
+### M6 — Rubric eval harness
+- **YAML rubric definitions** — `rubrics/cites_sources.yaml` and `rubrics/no_redundant_tool_calls.yaml`; each rubric has `name`, `description`, `enabled`, `judge_prompt` (with `{trace_json}` placeholder), and `pass_criteria`
+- **Eval runner** — `server/agentlens_server/eval_runner.py`; when a run completes, loads all enabled rubrics, serialises the trace to compact JSON, calls `claude-haiku-4-5-20251001` as judge, parses `{"pass": bool, "reasoning": "..."}`, writes results to the `evals` table
+- **`evals` table** — new SQLite table (`eval_id`, `run_id`, `rubric_name`, `status`, `reasoning`, `created_at`, `completed_at`); added to existing schema via `metadata.create_all`
+- **`GET /v1/runs/{id}/evals`** — new endpoint returns eval results for a run
+- **Background eval trigger** — `run_end` event fires `asyncio.create_task(run_evals_for_run(run_id))` for non-blocking execution
+- **Dashboard EvalPanel** — `src/components/EvalPanel.tsx`; renders a row per eval with colored badge (green PASS / red FAIL / yellow RUNNING / grey PENDING / orange ERROR) and truncated reasoning with full text on hover
+- **Eval polling** — `RunDetail` page polls `/v1/runs/{id}/evals` every 3s while run is live; stops when all evals reach terminal status
+- **6 integration tests** — `server/tests/test_evals.py` covering rubric loading, trace serialisation, empty endpoint, trigger assertion, and result retrieval
+
 ---
 
 ## Planned features
 
-- **Rubric evals** — define YAML rubrics, run Claude-as-judge against completed traces, get pass/fail + reasoning surfaced next to the trace — M6 (next)
+- **Demo agent** — 3-agent research assistant (Planner → Researcher → Writer) — M7 (next)
 - **Framework-agnostic** — works with raw Anthropic SDK, LangGraph, or any custom orchestrator
 - **Local-first** — SQLite persistence, single `docker compose up`, no cloud accounts
 
@@ -156,10 +167,11 @@ agent-lens/
 │   └── tests/
 ├── server/                     # FastAPI collector + SQLite storage
 │   ├── agentlens_server/
-│   │   ├── main.py             # FastAPI app: /v1/traces, /v1/runs, /v1/stream
-│   │   ├── db.py               # SQLAlchemy async engine, runs/spans schema
+│   │   ├── main.py             # FastAPI app: /v1/traces, /v1/runs, /v1/stream, /v1/runs/{id}/evals
+│   │   ├── db.py               # SQLAlchemy async engine, runs/spans/evals schema
+│   │   ├── eval_runner.py      # load_rubrics, serialize_trace, call_judge, run_evals_for_run
 │   │   └── sse.py              # SSEBroadcaster fan-out
-│   └── tests/                  # 9 integration tests
+│   └── tests/                  # 15 integration tests (9 collector + 6 evals)
 ├── dashboard/                  # React/Vite SPA (M5 complete)
 │   ├── src/
 │   │   ├── types.ts            # TypeScript interfaces: Run, Span, TraceEvent, KIND_COLORS
@@ -171,11 +183,14 @@ agent-lens/
 │   │   │   ├── StatusBadge.tsx    # Status pill (running/completed/failed)
 │   │   │   ├── GanttChart.tsx     # CSS proportional Gantt with hover tooltips
 │   │   │   ├── CallTree.tsx       # Collapsible span hierarchy tree
-│   │   │   └── SpanInspector.tsx  # 4-tab per-span detail pane
+│   │   │   ├── SpanInspector.tsx  # 4-tab per-span detail pane
+│   │   │   └── EvalPanel.tsx      # Pass/fail badges with hover-reasoning
 │   │   ├── lib/tree.ts         # buildChildMap, getSubtreeIds helpers
 │   │   └── __tests__/          # 24 vitest unit tests
 ├── examples/                   # Demo agents (M7)
-├── rubrics/                    # YAML eval rubric definitions (M6)
+├── rubrics/                    # YAML eval rubric definitions
+│   ├── cites_sources.yaml      # Did the agent cite sources?
+│   └── no_redundant_tool_calls.yaml  # Did the agent avoid duplicate tool calls?
 └── docs/                       # Screenshots, GIF, architecture diagrams
 ```
 
@@ -190,7 +205,7 @@ agent-lens/
 | M3 | FastAPI collector + SQLite schema | done |
 | M4 | Dashboard run list + Gantt timeline | done |
 | M5 | Span call-tree + per-span inspector | done |
-| M6 | Eval harness + rubric runner | planned |
+| M6 | Eval harness + rubric runner | done |
 | M7 | Demo agent (research assistant) | planned |
 | M8 | Polish + demo GIF + docs | planned |
 

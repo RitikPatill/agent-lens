@@ -1,4 +1,4 @@
-import type { Run, Span } from './types'
+import type { Eval, Run, Span } from './types'
 
 async function apiFetch<T>(url: string): Promise<T> {
   const res = await fetch(url)
@@ -14,4 +14,8 @@ export async function getRuns(): Promise<Run[]> {
 
 export async function getSpans(runId: string): Promise<Span[]> {
   return apiFetch<Span[]>(`/v1/runs/${runId}/spans`)
+}
+
+export async function getEvals(runId: string): Promise<Eval[]> {
+  return apiFetch<Eval[]>(`/v1/runs/${runId}/evals`)
 }
