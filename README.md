@@ -1,95 +1,65 @@
 # AgentLens
 
-**Make your multi-agent systems observable and evaluable.**
+> Self-hosted observability + LLM-as-judge eval dashboard for multi-agent runs: live traces, call trees, tool I/O, and inline rubric scoring.
 
-<!-- replace with real demo GIF after running make demo -->
-![Demo](docs/demo.gif)
+<!-- TODO: replace with a 5-10 second demo gif. Record with ScreenToGif on
+     Windows or peek on macOS. Save to docs/demo.gif and update path here. -->
+![demo](docs/demo.gif)
 
-AgentLens is a self-hosted dashboard that turns chaotic agent runs into structured, inspectable traces — with a built-in rubric eval harness powered by Claude-as-judge. Framework-agnostic, local-first, no cloud required.
+## What it is
 
-> **M8 shipped.** End-to-end demo is now one command: `make demo` starts the collector and dashboard, runs the research assistant example, and prints the dashboard URL so you can record a GIF. Set `ANTHROPIC_API_KEY` first.
+AgentLens makes multi-agent systems observable and evaluable without sending data to a third party. Wrap agent functions with a `@traced` decorator and every LLM call, tool invocation, agent handoff, and retry becomes a structured span. A React dashboard renders runs as an interactive Gantt timeline and hierarchical call tree, with per-span panels showing the exact prompt, output, tool call JSON, token counts, and latency.
 
----
+On top of raw tracing, AgentLens ships a rubric-based eval harness. Define YAML rubrics describing what a good run looks like — "did the agent cite its sources?", "did it avoid redundant tool calls?" — and AgentLens runs Claude-as-judge against each completed trace. Pass/fail results with the judge's reasoning appear inline next to the trace that produced them.
 
-## What works now
+## Quickstart
 
-### M1 — Scaffold
-- Monorepo layout: `sdk/`, `server/`, `dashboard/`, `examples/`, `rubrics/`, `docs/`
-- Python toolchain: root `pyproject.toml` with ruff (lint + format) and mypy; per-package `pyproject.toml` under `sdk/` and `server/`
-- Node toolchain: `dashboard/package.json` with ESLint, Prettier, Tailwind CSS, Vite, and TypeScript
-- Pre-commit config (`.pre-commit-config.yaml`) wiring ruff and ESLint hooks
-- `Makefile` with `install`, `lint`, `format`, and `test` targets (all functional); `dev` and `demo` stubbed for later milestones
-- `docker-compose.yml` and `server/Dockerfile` skeleton
-- MIT license, `.gitignore` covering Python and Node artifacts
+```bash
+git clone https://github.com/RitikPatill/agent-lens.git
+cd agent-lens
 
-### M2 — Trace schema + Python SDK
-- **Pydantic v2 trace models** — `Run`, `Span`, `SpanKind` (`llm`, `tool`, `agent`, `memory`, `retry`), `RunStatus`, and `TraceEvent`; all serialisable to JSON
-- **`TraceClient`** — module-level `configure()` sets the collector endpoint; `_emit` swallows transport errors via `warnings.warn` so instrumentation never crashes user code
-- **`@traced` decorator** — works on sync and async functions; opens a root span, propagates `run_id` / `span_id` via `contextvars`, and records duration + exceptions
-- **`span()` / `async_span()` context managers** — create child spans inside any traced function; nesting is tracked automatically
-- **`TracedAnthropic` / `TracedAsyncAnthropic`** — thin wrappers around the Anthropic SDK that capture model name, prompt messages, completion text, and token counts as `llm`-kind spans; import is guarded so `anthropic` remains an optional dependency
-- Unit tests covering models, decorator behaviour (sync + async), span nesting, context propagation, and the Anthropic wrapper
+# Install Python packages (requires Python 3.11+) and Node modules
+py -3.11 -m pip install -e "sdk/[dev]"
+py -3.11 -m pip install -e "server/[dev]"
+cd dashboard && npm install && cd ..
 
-### M3 — FastAPI collector + SQLite storage
-- **`POST /v1/traces`** — batch-ingest endpoint accepts a `TraceEvent` list; writes runs and spans to SQLite in a single transaction
-- **`GET /v1/runs`** — returns all runs ordered by start time, with status and token-count summaries
-- **`GET /v1/runs/{id}/spans`** — returns every span for a run, preserving parent–child relationships
-- **`GET /v1/stream`** — SSE endpoint; each new span is fanned out in real time to all connected subscribers via `SSEBroadcaster` (per-subscriber `asyncio.Queue`)
-- **SQLite schema** — async SQLAlchemy engine; `runs` and `spans` tables with indexes on `run_id` and `parent_span_id` for fast tree queries
-- **CORS** — `allow_origins=["*"]` for local dashboard development
-- **Integration tests** — 9 tests run the SDK against a live in-process collector; cover ingest, retrieval, and SSE delivery
+# Set your API key, then start everything and run the built-in demo
+export ANTHROPIC_API_KEY=sk-ant-...
+make demo
+# Open http://localhost:5173
+```
 
-### M4 — Dashboard: run list + live timeline
-- **Run list page (`/`)** — table of all runs with status badge, name, started-at (relative time), duration, model, and token count; rows link to run detail
-- **Run detail page (`/runs/:runId`)** — Gantt-style timeline of spans, color-coded by kind (`llm`=blue, `tool`=orange, `agent`=purple, `memory`=green, `retry`=red); hover tooltip shows name, kind, duration, and token counts
-- **Live SSE tailing** — running runs stream new spans in without a page refresh; Gantt bars grow in real time via 1-second tick
-- **Status badges** — green/amber (pulsing)/red for completed/running/failed
-- **Deep-links** — `/runs/:runId` URLs work directly; Vite dev server proxies `/v1/*` to `http://localhost:8000`
-- **7 unit tests** — `api.test.ts` covers fetch wrappers; `GanttChart.test.tsx` covers span rendering, running-span animation, and bar sizing
+`make demo` starts the FastAPI collector on port 8000 and the Vite dashboard on port 5173, runs `examples/research_assistant.py`, then keeps both services alive. Press Ctrl-C to stop.
 
+## Usage
 
-### M5 — Dashboard: call tree + span inspector
-- **Collapsible call tree** — right-hand panel in run detail; spans rendered as an indented hierarchy derived from `parent_span_id`; root nodes start expanded, deeper nodes start collapsed; kind-colored dots + duration for each node
-- **Span inspector** — opens below the timeline when a span is clicked (in either the Gantt or the tree); four tabs: **Input** (markdown), **Output** (markdown), **Metadata** (latency, model, per-span and subtree token counts), **Raw** (pretty JSON of attributes); closeable with `×`
-- **Clickable Gantt bars** — clicking a bar or label selects that span and highlights it with a white ring
-- **`src/lib/tree.ts`** — pure helpers `buildChildMap` / `getSubtreeIds` for tree construction and subtree token rollups
-- **24 unit tests across 5 files** — `tree.test.ts`, `CallTree.test.tsx`, `SpanInspector.test.tsx` (all new) plus existing `GanttChart.test.tsx` and `api.test.ts`
+After `make demo` the dashboard opens at `http://localhost:5173`. The demo run (a Planner → Researcher → Writer pipeline answering a research question) appears at the top of the run list with status `running` and spans streaming in live. Click the run to see the full call tree: the Planner spawning two parallel Researcher sub-agents, each making tool calls, then the Writer composing the final answer. Expand any span to inspect its prompt, response, and metadata.
 
+The **Eval** panel fills in roughly 30 seconds after completion with rubric scores: each rubric shows PASS or FAIL, and hovering shows the judge's reasoning.
 
-### M6 — Rubric eval harness
-- **YAML rubric definitions** — `rubrics/cites_sources.yaml` and `rubrics/no_redundant_tool_calls.yaml`; each rubric has `name`, `description`, `enabled`, `judge_prompt` (with `{trace_json}` placeholder), and `pass_criteria`
-- **Eval runner** — `server/agentlens_server/eval_runner.py`; when a run completes, loads all enabled rubrics, serialises the trace to compact JSON, calls `claude-haiku-4-5-20251001` as judge, parses `{"pass": bool, "reasoning": "..."}`, writes results to the `evals` table
-- **`evals` table** — new SQLite table (`eval_id`, `run_id`, `rubric_name`, `status`, `reasoning`, `created_at`, `completed_at`); added to existing schema via `metadata.create_all`
-- **`GET /v1/runs/{id}/evals`** — new endpoint returns eval results for a run
-- **Background eval trigger** — `run_end` event fires `asyncio.create_task(run_evals_for_run(run_id))` for non-blocking execution
-- **Dashboard EvalPanel** — `src/components/EvalPanel.tsx`; renders a row per eval with colored badge (green PASS / red FAIL / yellow RUNNING / grey PENDING / orange ERROR) and truncated reasoning with full text on hover
-- **Eval polling** — `RunDetail` page polls `/v1/runs/{id}/evals` every 3s while run is live; stops when all evals reach terminal status
-- **6 integration tests** — `server/tests/test_evals.py` covering rubric loading, trace serialisation, empty endpoint, trigger assertion, and result retrieval
+To instrument your own code:
 
-### M7 — Example multi-agent demo
-- **`examples/research_assistant.py`** — fully-instrumented async pipeline: Planner generates 2 search queries → 2 Researchers run in parallel (each calls a mocked web-search tool + LLM summariser) → Writer composes the final cited answer
-- **Canned search fixtures** — 10 entries covering SpaceX Starship topics; no paid search API required
-- **Full AgentLens instrumentation** — `@traced(kind=SpanKind.agent)` on each agent function, `async_span("web_search", kind=SpanKind.tool)` for each search call, manual `start_run`/`end_run` with `RunStatus`
-- **`TracedAsyncAnthropic`** — all LLM calls captured as `llm`-kind spans with token counts
-- **`rubrics/answer_addresses_question.yaml`** — third rubric completing the eval suite; checks the writer's answer directly addresses the original question
-- **3 unit tests** — `examples/tests/test_research_assistant.py`; covers `mock_search` hit/miss and full pipeline with mocked Anthropic (≥4 LLM calls asserted, no network)
-- Run with: `py -3.11 -m pytest examples/tests/ -v`
+```python
+from agentlens import configure, traced, span
+from agentlens.anthropic_wrap import TracedAsyncAnthropic
 
-### M8 — Demo + screenshots
-- **`make demo`** — single-command launcher: installs deps, starts the FastAPI collector (port 8000) and Vite dashboard (port 5173) as background processes, polls until the collector is ready, runs `examples/research_assistant.py`, then keeps services alive for GIF recording
-- **`scripts/record_demo.sh`** — bash script that handles the full orchestration with cleanup trap, health-check loop with timeout, and `DRY_RUN=1` support for CI
-- **`docs/screenshot.png`** / **`docs/demo.gif`** — placeholder images (replace with real captures after recording)
-- **`AGENTLENS_ENDPOINT` env var** — example now reads this (default `http://localhost:8000`) so the endpoint is configurable without editing source
-- **`.gitattributes`** — enforces LF line endings on `scripts/*.sh` for Git Bash on Windows compatibility
+configure(endpoint="http://localhost:8000")
+client = TracedAsyncAnthropic()  # drop-in for anthropic.AsyncAnthropic()
 
----
+@traced
+async def research(query: str) -> str:
+    async with span("fetch-context"):
+        ...  # retrieve documents
 
-## Planned features
+    response = await client.messages.create(
+        model="claude-opus-4-6",
+        max_tokens=1024,
+        messages=[{"role": "user", "content": query}],
+    )
+    return response.content[0].text
+```
 
-- **Framework-agnostic** — works with raw Anthropic SDK, LangGraph, or any custom orchestrator
-- **Local-first** — SQLite persistence, single `docker compose up`, no cloud accounts
-
----
+`TracedAsyncAnthropic` automatically captures model name, prompt, completion, and token counts without any extra code.
 
 ## Architecture
 
@@ -107,158 +77,36 @@ flowchart LR
   R["rubrics/*.yaml"] --> E
 ```
 
----
+The SDK sends trace events to the FastAPI collector over HTTP. The collector persists them to SQLite, fans events out to the dashboard via Server-Sent Events, and triggers a background eval task when a run completes. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for a full layer-by-layer breakdown.
 
-## Quickstart
-
-```bash
-export ANTHROPIC_API_KEY=sk-ant-...
-make demo
-# Open http://localhost:5173
-```
-
-`make demo` installs all dependencies, starts the collector and dashboard, runs the research assistant example, then keeps services alive so you can inspect the trace or record a GIF. Press Ctrl-C to stop.
-
----
-
-For development / testing:
-
-```bash
-make install   # installs Python packages (uv) + Node modules
-make lint      # ruff + eslint
-make test      # pytest: sdk/tests/ + server/tests/
-```
-
-Install pre-commit hooks:
-
-```bash
-pre-commit install
-```
-
-Start the dashboard (dev mode, proxies `/v1/*` to `localhost:8000`):
-
-```bash
-cd dashboard
-npm install
-npm run dev      # → http://localhost:5173
-npm test         # run 24 unit tests
-```
-
-Instrument your agent code with the SDK:
-
-```python
-from agentlens import configure, traced, span
-from agentlens.anthropic_wrap import TracedAnthropic
-
-configure(endpoint="http://localhost:8000")  # start the collector first: cd server && uvicorn agentlens_server.main:app
-
-client = TracedAnthropic()  # drop-in for anthropic.Anthropic()
-
-@traced
-async def research(query: str) -> str:
-    async with span("fetch-context"):
-        # ... retrieve documents ...
-        pass
-
-    response = await client.messages.create(
-        model="claude-opus-4-6",
-        max_tokens=1024,
-        messages=[{"role": "user", "content": query}],
-    )
-    return response.content[0].text
-```
-
----
-
-## Project layout
+## Project structure
 
 ```
 agent-lens/
-├── sdk/                        # agentlens Python package (pip install agentlens)
-│   ├── agentlens/
-│   │   ├── models.py           # Pydantic v2: Run, Span, SpanKind, TraceEvent
-│   │   ├── context.py          # contextvars: run_id / span_id propagation
-│   │   ├── client.py           # TraceClient, configure()
-│   │   ├── decorators.py       # @traced, span(), async_span()
-│   │   └── anthropic_wrap.py   # TracedAnthropic / TracedAsyncAnthropic
-│   └── tests/
-├── server/                     # FastAPI collector + SQLite storage
-│   ├── agentlens_server/
-│   │   ├── main.py             # FastAPI app: /v1/traces, /v1/runs, /v1/stream, /v1/runs/{id}/evals
-│   │   ├── db.py               # SQLAlchemy async engine, runs/spans/evals schema
-│   │   ├── eval_runner.py      # load_rubrics, serialize_trace, call_judge, run_evals_for_run
-│   │   └── sse.py              # SSEBroadcaster fan-out
-│   └── tests/                  # 15 integration tests (9 collector + 6 evals)
-├── dashboard/                  # React/Vite SPA (M5 complete)
-│   ├── src/
-│   │   ├── types.ts            # TypeScript interfaces: Run, Span, TraceEvent, KIND_COLORS
-│   │   ├── api.ts              # Typed fetch wrappers: getRuns(), getSpans()
-│   │   ├── hooks/useSSE.ts     # SSE hook with auto-reconnect
-│   │   ├── pages/RunList.tsx   # Run table with live SSE updates
-│   │   ├── pages/RunDetail.tsx # Gantt + call tree + span inspector
-│   │   ├── components/
-│   │   │   ├── StatusBadge.tsx    # Status pill (running/completed/failed)
-│   │   │   ├── GanttChart.tsx     # CSS proportional Gantt with hover tooltips
-│   │   │   ├── CallTree.tsx       # Collapsible span hierarchy tree
-│   │   │   ├── SpanInspector.tsx  # 4-tab per-span detail pane
-│   │   │   └── EvalPanel.tsx      # Pass/fail badges with hover-reasoning
-│   │   ├── lib/tree.ts         # buildChildMap, getSubtreeIds helpers
-│   │   └── __tests__/          # 24 vitest unit tests
-├── examples/                   # Demo agents
-│   ├── research_assistant.py   # Planner → 2× Researcher → Writer pipeline (M7)
-│   └── tests/                  # 3 unit tests (mock_search hit/miss + pipeline)
-├── rubrics/                    # YAML eval rubric definitions
-│   ├── cites_sources.yaml      # Did the agent cite sources?
-│   ├── no_redundant_tool_calls.yaml  # Did the agent avoid duplicate tool calls?
-│   └── answer_addresses_question.yaml  # Does the answer address the question? (M7)
-├── scripts/
-│   └── record_demo.sh          # Orchestration script for make demo
-└── docs/                       # Screenshots, GIF, architecture diagrams
-    ├── screenshot.png          # Run detail view (placeholder — replace after recording)
-    └── demo.gif                # Demo recording (placeholder — replace after recording)
+├── sdk/             # agentlens Python package — @traced, span(), TracedAnthropic
+├── server/          # FastAPI collector — /v1/traces ingest, SSE stream, eval runner
+├── dashboard/       # React/Vite SPA — run list, Gantt, call tree, span inspector
+├── examples/        # research_assistant.py — Planner → Researcher → Writer demo
+├── rubrics/         # YAML rubric definitions for Claude-as-judge eval
+├── scripts/         # record_demo.sh — orchestrates make demo
+└── docs/            # ARCHITECTURE.md, ROADMAP.md, demo.gif
 ```
 
----
+## Roadmap
 
-## Milestones
-
-| # | Name | Status |
-|---|------|--------|
-| M1 | Scaffold + README | done |
-| M2 | Trace schema + Python SDK | done |
-| M3 | FastAPI collector + SQLite schema | done |
-| M4 | Dashboard run list + Gantt timeline | done |
-| M5 | Span call-tree + per-span inspector | done |
-| M6 | Eval harness + rubric runner | done |
-| M7 | Demo agent (research assistant) | done |
-| M8 | Demo + screenshots (`make demo`) | done |
-
----
-
-## Development
-
-```bash
-# Install all deps
-make install
-
-# Lint
-make lint
-
-# Format
-make format
-
-# Test
-make test
-```
-
-Install pre-commit hooks (optional but recommended):
-
-```bash
-pre-commit install
-```
-
----
+- [ ] OpenTelemetry-compatible trace export (OTLP) so spans can be forwarded to Jaeger or Tempo
+- [ ] Token cost rollups per run and per model, with configurable price tables
+- [ ] Eval result diffing across runs to track regressions when prompts change
+- [ ] Auth layer (API key + session) for teams sharing a single collector instance
+- [ ] `pip install agentlens` release to PyPI with a one-command server start
 
 ## License
 
 MIT — see [LICENSE](LICENSE).
+
+---
+
+Built autonomously by [autodev](https://github.com/RitikPatill/autodev),
+a multi-agent orchestrator I designed. Each commit in this repo was
+authored by me; the implementation work was performed by Sonnet under
+the orchestrator's control. Read the orchestrator's README to see how.
