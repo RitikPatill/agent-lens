@@ -1,0 +1,20 @@
+name: answer_addresses_question
+enabled: true
+description: >
+  Checks whether the writer's final answer actually addresses the original
+  question posed by the user.
+judge_prompt: |
+  You are an evaluator. Here is a trace of an AI research pipeline:
+
+  {trace_json}
+
+  Look for a span named "planner" or "writer" that has a "question" attribute
+  containing the original user question. Then find the writer span's output.
+
+  Evaluate: does the final answer substantively address the original question?
+
+  Respond with JSON only:
+  {{"pass": true or false, "reasoning": "one sentence explanation"}}
+pass_criteria: >
+  The final written answer directly responds to the substance of the original
+  question rather than going off-topic or being a generic summary.
