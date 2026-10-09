@@ -27,6 +27,10 @@ htmlcov/
 *.db
 *.sqlite
 *.sqlite3
+agentlens*.db
+
+# Demo logs
+logs/
 
 # Node
 node_modules/

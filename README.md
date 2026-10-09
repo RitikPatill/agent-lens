@@ -2,12 +2,12 @@
 
 **Make your multi-agent systems observable and evaluable.**
 
-<!-- TODO: replace with actual demo GIF after M8 -->
-![Demo placeholder](docs/demo-placeholder.gif)
+<!-- replace with real demo GIF after running make demo -->
+![Demo](docs/demo.gif)
 
 AgentLens is a self-hosted dashboard that turns chaotic agent runs into structured, inspectable traces — with a built-in rubric eval harness powered by Claude-as-judge. Framework-agnostic, local-first, no cloud required.
 
-> **M7 shipped.** Example multi-agent demo is live. Run `python examples/research_assistant.py "How did SpaceX land Starship?"` against a running collector to watch a Planner → 2× Researcher (parallel) → Writer pipeline stream into the dashboard in real time. Three rubrics (`cites_sources`, `no_redundant_tool_calls`, `answer_addresses_question`) evaluate the completed run automatically.
+> **M8 shipped.** End-to-end demo is now one command: `make demo` starts the collector and dashboard, runs the research assistant example, and prints the dashboard URL so you can record a GIF. Set `ANTHROPIC_API_KEY` first.
 
 ---
 
@@ -75,6 +75,13 @@ AgentLens is a self-hosted dashboard that turns chaotic agent runs into structur
 - **3 unit tests** — `examples/tests/test_research_assistant.py`; covers `mock_search` hit/miss and full pipeline with mocked Anthropic (≥4 LLM calls asserted, no network)
 - Run with: `py -3.11 -m pytest examples/tests/ -v`
 
+### M8 — Demo + screenshots
+- **`make demo`** — single-command launcher: installs deps, starts the FastAPI collector (port 8000) and Vite dashboard (port 5173) as background processes, polls until the collector is ready, runs `examples/research_assistant.py`, then keeps services alive for GIF recording
+- **`scripts/record_demo.sh`** — bash script that handles the full orchestration with cleanup trap, health-check loop with timeout, and `DRY_RUN=1` support for CI
+- **`docs/screenshot.png`** / **`docs/demo.gif`** — placeholder images (replace with real captures after recording)
+- **`AGENTLENS_ENDPOINT` env var** — example now reads this (default `http://localhost:8000`) so the endpoint is configurable without editing source
+- **`.gitattributes`** — enforces LF line endings on `scripts/*.sh` for Git Bash on Windows compatibility
+
 ---
 
 ## Planned features
@@ -104,7 +111,17 @@ flowchart LR
 
 ## Quickstart
 
-Install dependencies and run the test suite:
+```bash
+export ANTHROPIC_API_KEY=sk-ant-...
+make demo
+# Open http://localhost:5173
+```
+
+`make demo` installs all dependencies, starts the collector and dashboard, runs the research assistant example, then keeps services alive so you can inspect the trace or record a GIF. Press Ctrl-C to stop.
+
+---
+
+For development / testing:
 
 ```bash
 make install   # installs Python packages (uv) + Node modules
@@ -151,18 +168,6 @@ async def research(query: str) -> str:
     return response.content[0].text
 ```
 
-Run the example demo (requires a running collector at `localhost:8080` and an `ANTHROPIC_API_KEY`):
-
-```bash
-# Start the collector
-cd server && uvicorn agentlens_server.main:app --port 8080
-
-# In another terminal, run the demo
-python examples/research_assistant.py "How did SpaceX land Starship?"
-```
-
-> **`make dev`** will become a single-command launcher in a later milestone.
-
 ---
 
 ## Project layout
@@ -206,7 +211,11 @@ agent-lens/
 │   ├── cites_sources.yaml      # Did the agent cite sources?
 │   ├── no_redundant_tool_calls.yaml  # Did the agent avoid duplicate tool calls?
 │   └── answer_addresses_question.yaml  # Does the answer address the question? (M7)
+├── scripts/
+│   └── record_demo.sh          # Orchestration script for make demo
 └── docs/                       # Screenshots, GIF, architecture diagrams
+    ├── screenshot.png          # Run detail view (placeholder — replace after recording)
+    └── demo.gif                # Demo recording (placeholder — replace after recording)
 ```
 
 ---
@@ -222,7 +231,7 @@ agent-lens/
 | M5 | Span call-tree + per-span inspector | done |
 | M6 | Eval harness + rubric runner | done |
 | M7 | Demo agent (research assistant) | done |
-| M8 | Polish + demo GIF + docs | planned |
+| M8 | Demo + screenshots (`make demo`) | done |
 
 ---
 
