@@ -194,7 +194,9 @@ async def writer(
 
 
 async def main(question: str) -> None:
-    configure("http://localhost:8080")
+    import os
+    endpoint = os.environ.get("AGENTLENS_ENDPOINT", "http://localhost:8000")
+    configure(endpoint)
     tc = get_default_client()
     llm = TracedAsyncAnthropic()
 
