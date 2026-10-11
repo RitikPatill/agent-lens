@@ -1,5 +1,9 @@
 # AgentLens
 
+
+> **Video walkthrough:** https://youtu.be/ZLOEF98tE9k
+> **60-second overview:** https://youtu.be/s48Y7D9n-N4
+
 > Self-hosted observability + LLM-as-judge eval dashboard for multi-agent runs: live traces, call trees, tool I/O, and inline rubric scoring.
 
 <!-- TODO: replace with a 5-10 second demo gif. Record with ScreenToGif on
